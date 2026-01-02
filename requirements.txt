@@ -3,3 +3,4 @@ ollama
 opencv-python
 gradio
 xhtml2pdf
+python-docx
