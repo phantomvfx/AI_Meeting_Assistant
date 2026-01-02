@@ -16,6 +16,7 @@ __pycache__/
 
 # Ignore generated reports
 temp_reports/
+temp_unified/
 output/
 *.pdf
 *.html

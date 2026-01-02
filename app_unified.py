@@ -66,6 +66,34 @@ def convert_html_to_pdf(source_html, output_filename):
         print(f"PDF Gen Error: {e}")
         return False
 
+def chunk_text(text, chunk_size=6000, overlap=100):
+    """Splits text into chunks of roughly chunk_size with overlap."""
+    if len(text) <= chunk_size:
+        return [text]
+    
+    chunks = []
+    start = 0
+    text_len = len(text)
+    
+    while start < text_len:
+        end = start + chunk_size
+        
+        # adjusting end to avoid cutting words if possible (optional simple logic)
+        if end < text_len:
+            # find last space within the lookahead buffer handling
+            last_space = text.rfind(' ', start, end)
+            if last_space != -1 and last_space > start + (chunk_size // 2):
+                end = last_space
+        
+        chunks.append(text[start:end])
+        start = end - overlap # move back for overlap
+        
+        # Prevent infinite loop if overlap >= chunk_size or similar edge cases
+        if start >= end:
+            start = end
+            
+    return chunks
+
 def save_as_docx(title, summary, output_filename):
     try:
         doc = Document()
@@ -116,14 +144,24 @@ def process_assistant(file_obj, keyword, custom_prompt, progress=gr.Progress()):
             mentions_html += f"<div class='mention'><strong>{time_str}</strong>: {segment['text']}{img_tag}</div>"
 
     # 3. Summarize
-    progress(0.7, desc="AI Summarizing...")
+    progress(0.7, desc="AI Summarizing (Chunking)...")
     hidden_rules = "STRICT: Output HTML-friendly text. No fillers. No questions."
-    final_prompt = f"{hidden_rules}\n{custom_prompt}\nTRANSCRIPT:\n{full_text[:8000]}"
     
-    try:
-        response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': final_prompt}])
-        summary = response['message']['content'].replace("\n", "<br>")
-    except Exception as e: summary = f"Error: {e}"
+    text_chunks = chunk_text(full_text)
+    summary_parts = []
+
+    for i, chunk in enumerate(text_chunks):
+        progress((0.7 + (0.2 * (i+1)/len(text_chunks))), desc=f"Summarizing chunk {i+1}/{len(text_chunks)}...")
+        final_prompt = f"{hidden_rules}\n{custom_prompt}\nTRANSCRIPT PART {i+1}:\n{chunk}"
+        
+        try:
+            response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': final_prompt}])
+            part_content = response['message']['content'].replace("\n", "<br>")
+            summary_parts.append(part_content)
+        except Exception as e:
+            summary_parts.append(f"<i>Error in chunk {i+1}: {e}</i>")
+
+    summary = "<br><hr><br>".join(summary_parts)
 
     # 4. Render
     html_out = f"<h1>Report: {filename}</h1><h2>Summary</h2><div class='box'>{summary}</div><h2>Mentions ({found_count})</h2>{mentions_html}"
@@ -167,23 +205,35 @@ def process_translator(file_obj, source_lang, target_lang, progress=gr.Progress(
 
 
     # 3. Translate & Summarize
-    progress(0.7, desc=f"Translating to {target_lang}...")
+    # 3. Translate & Summarize
+    progress(0.7, desc=f"Translating to {target_lang} (Chunking)...")
     
     translation_prompt = f"""
     ROLE: Professional Interpreter.
     TASK: Translate the following transcript from {source_lang} into {target_lang}.
     INSTRUCTIONS:
-    1. Provide a clear and accurate translation.
+    1. Provide a clear and accurate translation of the segment.
     2. Output strictly in {target_lang}.
     3. Do not add conversational fillers.
+    4. Maintain continuity if possible.
     """
     
-    final_prompt = f"{translation_prompt}\n\nORIGINAL TRANSCRIPT:\n{full_text_original[:8000]}"
+    text_chunks = chunk_text(full_text_original)
+    translated_parts = []
+    
+    for i, chunk in enumerate(text_chunks):
+        progress((0.7 + (0.2 * (i+1)/len(text_chunks))), desc=f"Translating chunk {i+1}/{len(text_chunks)}...")
+        
+        final_prompt = f"{translation_prompt}\n\nORIGINAL TRANSCRIPT PART {i+1}:\n{chunk}"
+        
+        try:
+            response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': final_prompt}])
+            part_content = response['message']['content'].replace("\n", "<br>")
+            translated_parts.append(part_content)
+        except Exception as e:
+            translated_parts.append(f"<i>Error in chunk {i+1}: {e}</i>")
 
-    try:
-        response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': final_prompt}])
-        summary = response['message']['content'].replace("\n", "<br>")
-    except Exception as e: summary = f"Error: {e}"
+    summary = "<br><hr><br>".join(translated_parts)
 
     # 4. Render HTML (No PDF for translation to avoid font issues)
     # 4. Render HTML
