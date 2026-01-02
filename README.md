@@ -1,8 +1,17 @@
 # AI Meeting Assistant & Universal Translator
 
 A local AI tool suite containing:
-1.  **Meeting Assistant**: Transcribes meetings, finds mentions of keywords, and summarizes action items.
-2.  **Universal Translator**: Translates audio/video to a target language text with DOCX export.
+
+1.  **Meeting Assistant**: 
+    - Transcribes audio/video meetings.
+    - Finds mentions of specific keywords with timestamps.
+    - Generates actionable summaries.
+    - Exports to PDF.
+2.  **Universal Translator**: 
+    - Translates audio/video directly to a target language text.
+    - **Supports Kanji** and other complex scripts.
+    - Simplified interface (no prompts/keywords needed).
+    - **Exports results to .docx** (Word/Google Docs compatible).
 
 ## Prerequisites
 
